@@ -120,7 +120,7 @@ finrec-serving-platform/
 
 ### 1. Prerequisites & Installation
 ```bash
-git clone https://github.com/your-username/finrec-serving-platform.git
+git clone https://github.com/arifrhm/finrec-serving-platform.git
 cd finrec-serving-platform
 
 python3 -m venv venv
