@@ -1,9 +1,7 @@
-import asyncio
 import time
 import statistics
-import json
-import urllib.request
-import urllib.error
+import threading
+import requests
 from concurrent.futures import ThreadPoolExecutor
 
 TARGET_URL = "http://127.0.0.1:8000/api/v1/recommend"
@@ -16,20 +14,22 @@ PAYLOAD = {
     "include_explanation": False
 }
 
+thread_local = threading.local()
+
+def get_session():
+    if not hasattr(thread_local, "session"):
+        thread_local.session = requests.Session()
+        adapter = requests.adapters.HTTPAdapter(pool_connections=20, pool_maxsize=20)
+        thread_local.session.mount("http://", adapter)
+    return thread_local.session
+
 def send_request(session_id: int):
-    data = json.dumps(PAYLOAD).encode("utf-8")
-    req = urllib.request.Request(
-        TARGET_URL,
-        data=data,
-        headers={"Content-Type": "application/json"}
-    )
+    session = get_session()
     t0 = time.perf_counter()
     try:
-        with urllib.request.urlopen(req, timeout=5.0) as resp:
-            status = resp.status
-            body = resp.read()
-            latency_ms = (time.perf_counter() - t0) * 1000
-            return (status == 200, latency_ms)
+        resp = session.post(TARGET_URL, json=PAYLOAD, timeout=5.0)
+        latency_ms = (time.perf_counter() - t0) * 1000
+        return (resp.status_code == 200, latency_ms)
     except Exception as e:
         latency_ms = (time.perf_counter() - t0) * 1000
         return (False, latency_ms)

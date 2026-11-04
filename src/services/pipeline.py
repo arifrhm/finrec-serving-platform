@@ -1,12 +1,10 @@
 import time
 import numpy as np
 from fastapi import FastAPI, HTTPException, Response
-from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from ray import serve
 from ray.serve.handle import DeploymentHandle
 
 from src.core.schemas import RecommendationRequest, RecommendationResponse
-from src.core.metrics import REQUEST_COUNT, PIPELINE_LATENCY, STAGE_LATENCY
 from src.services.retrieval import CandidateRetrievalService, MOCK_PRODUCT_CATALOG
 from src.services.feature_store import FeatureStoreClient
 from src.services.filtering import FintechComplianceFilter
@@ -45,11 +43,13 @@ class FinRecPipelineDeployment:
         return {"status": "healthy", "service": "finrec-engine", "version": self.model_version}
 
     @app.get("/metrics")
-    async def metrics():
+    async def metrics(self):
+        from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
         return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     @app.post("/api/v1/recommend", response_model=RecommendationResponse)
     async def recommend(self, req: RecommendationRequest):
+        from src.core.metrics import REQUEST_COUNT, PIPELINE_LATENCY, STAGE_LATENCY
         t0 = time.perf_counter()
         stage_times = {}
 

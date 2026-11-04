@@ -3,7 +3,6 @@ from typing import List, Dict, Any, Tuple
 import numpy as np
 from ray import serve
 from src.core.schemas import ProductCandidate, ScoredProduct
-from src.core.metrics import DYNAMIC_BATCH_SIZE, STAGE_LATENCY
 
 @serve.deployment(
     name="RankingScorerDeployment",
@@ -32,6 +31,8 @@ class RankingScorerDeployment:
         """
         Dynamically batched scoring method. Ray Serve runtime groups calls from different callers.
         """
+        from src.core.metrics import DYNAMIC_BATCH_SIZE, STAGE_LATENCY
+
         batch_size = len(items_batch)
         DYNAMIC_BATCH_SIZE.observe(batch_size)
         start_t = time.perf_counter()
