@@ -5,10 +5,11 @@ from ray import serve
 from ray.serve.handle import DeploymentHandle
 
 from src.core.schemas import RecommendationRequest, RecommendationResponse
-from src.services.retrieval import CandidateRetrievalService, MOCK_PRODUCT_CATALOG
+from src.services.retrieval import CandidateRetrievalService
 from src.services.feature_store import FeatureStoreClient
 from src.services.filtering import FintechComplianceFilter
 from src.services.explainer import QuantizedLLMExplainer
+from src.services.ab_testing import ExperimentationRouter
 
 app = FastAPI(
     title="FinRec Serving Platform",
@@ -31,16 +32,17 @@ class FinRecPipelineDeployment:
     """
     def __init__(self, ranking_handle: DeploymentHandle):
         self.ranking_handle = ranking_handle
-        self.retrieval_service = CandidateRetrievalService(embedding_dim=64)
+        self.retrieval_service = CandidateRetrievalService(embedding_dim=64, catalog_size=1000)
         self.feature_store = FeatureStoreClient()
         self.compliance_filter = FintechComplianceFilter()
         self.llm_explainer = QuantizedLLMExplainer()
-        self.catalog_map = {item.product_id: item for item in MOCK_PRODUCT_CATALOG}
-        self.model_version = "v2.4.0-deepfm-prod"
+        self.router = ExperimentationRouter()
+        self.catalog_map = {item.product_id: item for item in self.retrieval_service.catalog}
+        print(f"[FinRecPipelineDeployment] Initialized with {len(self.catalog_map)} products in lookup index.")
 
     @app.get("/healthz")
     async def healthcheck(self):
-        return {"status": "healthy", "service": "finrec-engine", "version": self.model_version}
+        return {"status": "healthy", "service": "finrec-engine", "catalog_items": len(self.catalog_map)}
 
     @app.get("/metrics")
     async def metrics(self):
@@ -54,15 +56,17 @@ class FinRecPipelineDeployment:
         stage_times = {}
 
         try:
-            # 1. Real-time Feature Hydration (Feast / Redis)
+            # 0. Dynamic A/B Testing Variant Assignment
+            active_variant, _ = self.router.assign_variant(req.user_id)
+
+            # 1. Real-time Dynamic Feature Hydration (Feast / Redis)
             t_feat_start = time.perf_counter()
             user_features = await self.feature_store.get_online_features(req.user_id)
             stage_times["feature_hydration_ms"] = (time.perf_counter() - t_feat_start) * 1000
             STAGE_LATENCY.labels(stage="hydration").observe(stage_times["feature_hydration_ms"] / 1000)
 
-            # 2. Candidate Retrieval (Vector / Bi-Encoder Two-Tower)
+            # 2. Dynamic Candidate Retrieval (Vector / Bi-Encoder Two-Tower over 1000 items)
             t_ret_start = time.perf_counter()
-            # Deterministic user embedding vector for simulation
             np.random.seed(abs(hash(req.user_id)) % (2**31))
             user_vec = np.random.randn(64).astype(np.float32)
             user_vec /= np.linalg.norm(user_vec)
@@ -80,7 +84,6 @@ class FinRecPipelineDeployment:
 
             # 3. Dynamic Batched ML Ranking (Ray Serve Actor Pool)
             t_rank_start = time.perf_counter()
-            # Asynchronous RPC to dynamically batched Ray Actor
             scored_candidates = await self.ranking_handle.remote(user_features, candidates)
             stage_times["ranking_inference_ms"] = (time.perf_counter() - t_rank_start) * 1000
 
@@ -101,7 +104,7 @@ class FinRecPipelineDeployment:
                 stage_times["llm_explanation_ms"] = (time.perf_counter() - t_llm_start) * 1000
 
             total_latency = (time.perf_counter() - t0) * 1000
-            PIPELINE_LATENCY.labels(model_version=self.model_version).observe(total_latency / 1000)
+            PIPELINE_LATENCY.labels(model_version=active_variant).observe(total_latency / 1000)
             REQUEST_COUNT.labels(status="200", endpoint="/recommend").inc()
 
             return RecommendationResponse(
@@ -109,7 +112,7 @@ class FinRecPipelineDeployment:
                 recommendations=final_recs,
                 pipeline_latency_ms=round(total_latency, 2),
                 stage_breakdown_ms={k: round(v, 2) for k, v in stage_times.items()},
-                model_version=self.model_version
+                model_version=active_variant
             )
 
         except Exception as e:
