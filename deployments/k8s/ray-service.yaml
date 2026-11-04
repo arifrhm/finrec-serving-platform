@@ -1,0 +1,81 @@
+apiVersion: ray.io/v1
+kind: RayService
+metadata:
+  name: finrec-recommendation-service
+  namespace: recommendation-production
+  labels:
+    app.kubernetes.io/name: finrec-engine
+    app.kubernetes.io/component: recommendation-serving
+spec:
+  serviceUnhealthyThreshold: 300
+  rayClusterConfig:
+    rayVersion: '2.35.0'
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: '0.0.0.0'
+        num-cpus: '0'
+      template:
+        spec:
+          containers:
+            - name: ray-head
+              image: rayproject/ray:2.35.0-py310
+              resources:
+                limits:
+                  cpu: '2'
+                  memory: '4Gi'
+                requests:
+                  cpu: '1'
+                  memory: '2Gi'
+              ports:
+                - containerPort: 6379
+                  name: gcs
+                - containerPort: 8265
+                  name: dashboard
+                - containerPort: 8000
+                  name: serve
+              readinessProbe:
+                httpGet:
+                  path: /healthz
+                  port: 8000
+                initialDelaySeconds: 15
+                periodSeconds: 5
+    workerGroupSpecs:
+      - groupName: recsys-worker-group
+        replicas: 2
+        minReplicas: 2
+        maxReplicas: 10
+        rayStartParams: {}
+        template:
+          spec:
+            containers:
+              - name: ray-worker
+                image: rayproject/ray:2.35.0-py310
+                resources:
+                  limits:
+                    cpu: '4'
+                    memory: '8Gi'
+                  requests:
+                    cpu: '2'
+                    memory: '4Gi'
+                env:
+                  - name: FEATURE_STORE_REDIS_HOST
+                    value: "redis-cluster.cache.svc.cluster.local"
+                  - name: PROMETHEUS_MULTIPROC_DIR
+                    value: "/tmp/ray/metrics"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: finrec-service-lb
+  namespace: recommendation-production
+spec:
+  type: ClusterIP
+  selector:
+    ray.io/node-type: head
+  ports:
+    - name: http-serve
+      port: 8000
+      targetPort: 8000
+    - name: metrics
+      port: 8000
+      targetPort: 8000
