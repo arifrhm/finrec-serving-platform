@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-11-05T02:16:10Z",
+  "endpoint": "http://127.0.0.1:8000/api/v1/recommend",
+  "parameters": {
+    "total_requests": 500,
+    "concurrency": 15,
+    "include_llm": false
+  },
+  "metrics": {
+    "successes": 500,
+    "failures": 0,
+    "total_wall_time_seconds": 3.79,
+    "throughput_qps": 131.83,
+    "latency_p50_ms": 110.22,
+    "latency_p90_ms": 131.21,
+    "latency_p95_ms": 136.82,
+    "latency_p99_ms": 159.97,
+    "latency_min_ms": 65.66,
+    "latency_max_ms": 185.64
+  },
+  "ab_testing_variants": {
+    "DeepFM-v2.4": 253,
+    "XGBoost-v1.8-RiskAdjusted": 247
+  },
+  "stage_breakdown_mean_ms": {
+    "feature_hydration_ms": 1.51,
+    "candidate_retrieval_ms": 0.23,
+    "ranking_inference_ms": 16.26,
+    "compliance_filtering_ms": 0.03
+  }
+}

@@ -76,6 +76,8 @@ Unlike generic e-commerce engines, financial recommendations require strict guar
 
 ## 📊 Benchmark Results
 
+> 📄 **Live Artifacts:** For the full automated test run report and machine-readable logs, see [BENCHMARK_REPORT.md](benchmarks/results/BENCHMARK_REPORT.md) and [latest_benchmark.json](benchmarks/results/latest_benchmark.json).
+
 Benchmarked with **500 concurrent client requests** against a 2-replica Ray Serve cluster on an 8-core CPU instance:
 
 | Metric | Baseline (Sequential FastAPI) | FinRec (Ray Serve + Dynamic Batching) | Improvement |
@@ -96,7 +98,10 @@ finrec-serving-platform/
 │   └── k8s/
 │       └── ray-service.yaml       # Production KubeRay Custom Resource (Autoscaling)
 ├── benchmarks/
-│   └── benchmark.py               # Asynchronous concurrency load test harness
+│   ├── benchmark.py               # Asynchronous concurrency load test harness
+│   └── results/
+│       ├── BENCHMARK_REPORT.md    # Automated markdown benchmark report
+│       └── latest_benchmark.json  # Raw structured benchmark telemetry
 ├── src/
 │   ├── core/
 │   │   ├── schemas.py             # Pydantic v2 domain models
